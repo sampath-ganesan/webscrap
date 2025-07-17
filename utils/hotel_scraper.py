@@ -4,6 +4,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from utils.web_driver_manager import WebDriverManager
 from utils.config import Config
 from bs4 import BeautifulSoup
+import requests
 import logging
 import time
 import sys
@@ -166,3 +167,43 @@ class HotelScraper:
                 raise
 
         return []
+
+    def get_filter_details(self, search_term):
+        try:
+            # Set up headers to mimic a browser request
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            }
+
+            initial_url = f"{Config.BOOKING_BASE_URL}?ss={search_term}"
+            response = requests.get(initial_url, headers=headers)
+            
+            if response.status_code != 200:
+                self.logger.error(f"Failed to fetch page. Status code: {response.status_code}")
+                return None
+
+            # Parse the HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Initialize dictionary to store filter details
+            filter_details = {
+                'all': [],               
+            }
+
+            all_filters = soup.find_all('div', {'data-testid': 'filters-group-label-content'})
+            for rating in all_filters:
+                if rating.text:
+                    filter_details['all'].append({
+                        'name': rating.text,            
+                    })
+                        
+            return filter_details
+            
+        except requests.RequestException as e:
+            self.logger.error(f"Error fetching filter details: {str(e)}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error parsing filter details: {str(e)}")
+            return None

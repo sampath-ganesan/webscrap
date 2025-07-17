@@ -43,9 +43,10 @@ class HotelSearchApp:
         # Configure grid weights
         self.setup_grid_weights()
         
-        # Add search button to search frame
-        ttk.Button(self.search_frame.frame, text="Search Hotels", 
-                  command=self.search_hotels).grid(row=7, column=0, columnspan=3, pady=20)
+        # Add search button to search frame's button frame
+        self.search_button = ttk.Button(self.search_frame.buttons_frame, text="Search Hotels", 
+                                      command=self.search_hotels)
+        self.search_button.pack(side=tk.LEFT, padx=5)
         
     def setup_window(self):
         screen_width = self.root.winfo_screenwidth()
@@ -74,6 +75,22 @@ class HotelSearchApp:
         self.search_frame.frame.grid_remove()
         self.searching_label.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
         self.root.update()
+        
+    def show_error_message(self, error_message):
+        # Create error frame
+        error_frame = ttk.Frame(self.main_frame, padding="10")
+        error_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5, pady=5)
+        
+        # Show error message
+        error_label = ttk.Label(error_frame, 
+                               text=f"Error: {error_message}\nPlease try again.", 
+                               font=('Arial', 12))
+        error_label.pack(pady=20)
+        
+        # Add Try New Search button
+        retry_button = ttk.Button(error_frame, text="Try New Search", 
+                                 command=lambda: [error_frame.destroy(), self.show_search_criteria()])
+        retry_button.pack(pady=10)
         
     def show_results(self):
         self.search_frame.frame.grid_remove()
@@ -147,8 +164,8 @@ class HotelSearchApp:
             self.show_results()
             
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred while searching: {str(e)}")
-            self.show_search_criteria()
+            self.searching_label.grid_remove()
+            self.show_error_message(f"An error occurred while searching: {str(e)}")
 
 def main():
     root = tk.Tk()

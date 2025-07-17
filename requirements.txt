@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+numpy
+lxml
+pandas
+selenium
+urllib3
+tkcalendar
+pyinstaller
