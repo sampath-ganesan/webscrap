@@ -1,7 +1,9 @@
 import tkinter as tk
 from tkinter import ttk
 from tkcalendar import Calendar
+from utils.config import Config
 from utils.hotel_scraper import HotelScraper
+from utils.resources.filters import Filters
 
 class SearchFrame:
     def __init__(self, parent):
@@ -46,6 +48,18 @@ class SearchFrame:
         self.adults = ttk.Spinbox(self.search_criteria_frame, from_=1, to=10, width=5)
         self.adults.set(2)
         self.adults.grid(row=3, column=1, sticky=tk.W, pady=5)
+
+        # Adult Increment
+        ttk.Label(self.search_criteria_frame, text="Adult Increment:").grid(row=3, column=2, sticky=tk.W, pady=5, padx=(10,0))
+        self.adult_increment = ttk.Spinbox(self.search_criteria_frame, from_=0, to=5, width=5)
+        self.adult_increment.set(0)
+        self.adult_increment.grid(row=3, column=3, sticky=tk.W, pady=5)
+
+        # Step Count
+        ttk.Label(self.search_criteria_frame, text="Step Count:").grid(row=3, column=4, sticky=tk.W, pady=5, padx=(10,0))
+        self.step_count = ttk.Spinbox(self.search_criteria_frame, from_=1, to=5, width=5)
+        self.step_count.set(1)
+        self.step_count.grid(row=3, column=5, sticky=tk.W, pady=5)
         
         # Rooms
         ttk.Label(self.search_criteria_frame, text="Rooms:").grid(row=4, column=0, sticky=tk.W, pady=5)
@@ -93,9 +107,9 @@ class SearchFrame:
         # Select All checkbox
         self.select_all_var = tk.BooleanVar()
         self.select_all_checkbox = ttk.Checkbutton(self.filter_frame, 
-                                                  text="Select All", 
-                                                  variable=self.select_all_var,
-                                                  command=self.toggle_all_filters)
+                                                text="Select All", 
+                                                variable=self.select_all_var,
+                                                command=self.toggle_all_filters)
         self.select_all_checkbox.pack(anchor=tk.W, padx=5, pady=5)
         
         # Create canvas for scrollable content
@@ -113,13 +127,13 @@ class SearchFrame:
         
         # Add disabled placeholder text
         self.placeholder_label = ttk.Label(self.filters_frame, 
-                                         text="Click refresh button (↻) to load filters",
-                                         foreground="gray")
+                                        text="Click refresh button (↻) to load filters",
+                                        foreground="gray")
         self.placeholder_label.pack(pady=20)
         
         # Disable select all checkbox initially
         self.select_all_checkbox.configure(state='disabled')
-        
+
     def refresh_filters(self):
         """Called when refresh button is clicked"""
         # Clear placeholder if it exists
@@ -141,8 +155,8 @@ class SearchFrame:
         self.filter_vars.clear()
         
         # Load fresh filters
-        self.load_filters()
-        
+        self.load_filters()        
+
     def load_filters(self, *args):
         # Ensure all existing widgets are destroyed
         for widget in self.filters_frame.winfo_children():
@@ -162,7 +176,7 @@ class SearchFrame:
         
         try:
             # Get new filters
-            filters = self.hotel_scraper.get_filter_details(self.destination.get())
+            filters = Filters.filter
             loading_label.destroy()
             
             if filters and 'all' in filters:
@@ -259,14 +273,39 @@ class SearchFrame:
             self.select_all_var.set(False)
         
     def get_search_params(self):
-        selected_filters = [name for name, items in self.filter_vars.items() if items['var'].get()]
+        # Get selected filter names and find their corresponding values from Filters class
+        selected_filter_names = [name for name, items in self.filter_vars.items() if items['var'].get()]
+        selected_filter_values = []
+        
+        # Match selected names with filter values from Filters class
+        for filter_item in Filters.filter['all']:
+            if filter_item['name'] in selected_filter_names:
+                selected_filter_values.append(filter_item['value'])
+        
+        # Generate list of adult counts based on increment and step count
+        base_adults = int(self.adults.get())
+        adult_increment = int(self.adult_increment.get())
+        step_count = int(self.step_count.get())
+        adult_counts = []
+        
+        if adult_increment > 0 and step_count > 1:
+            # Generate sequence of adult counts
+            for i in range(step_count):
+                adult_count = base_adults + (i * adult_increment)
+                if adult_count <= 10:  # Maximum adult limit
+                    adult_counts.append(adult_count)
+        else:
+            adult_counts = [base_adults]
+        
         return {
             "destination": self.destination.get(),
             "checkin_date": self.checkin_cal.get_date(),
             "checkout_date": self.checkout_cal.get_date(),
-            "adults": self.adults.get(),
+            "adult_counts": adult_counts,  # List of adult counts to search for
+            "base_adults": base_adults,    # Original adult count
             "rooms": self.rooms.get(),
             "children": self.children.get(),
             "search_type": self.search_type.get(),
-            "selected_filters": selected_filters
+            "selected_filters": selected_filter_names,
+            "filter_params": selected_filter_values  # Add the URL parameters for filters
         }
