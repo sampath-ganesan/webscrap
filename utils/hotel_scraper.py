@@ -1,6 +1,8 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import urllib
+from utils.helpers.login_helper import LoginHelper
 from utils.web_driver_manager import WebDriverManager
 from utils.config import Config
 from bs4 import BeautifulSoup
@@ -17,6 +19,8 @@ class HotelScraper:
         self._setup_logging()
         self._max_retries = 2
         self._retry_delay = 2  # seconds
+        self.dest_id = None
+        self.dest_type = None
 
     def _setup_logging(self):
         self.logger = logging.getLogger('HotelScraper')
@@ -34,6 +38,18 @@ class HotelScraper:
             sys.stdout.flush()
             time.sleep(Config.LOADING_DELAY)
             yield
+
+    def login(self):
+        """Login to Booking.com using email and password."""
+        if Config.DO_LOGING:
+            self.logger.info("Starting login process")
+            try:
+                login_helper = LoginHelper()
+                login_helper.login_with_email()
+                self.logger.info("Login successful")
+            except Exception as e:
+                self.logger.error(f"Login failed: {str(e)}")
+                raise
 
     def get_destination_info(self, search_term):
         """Get destination ID and type from search term"""
@@ -71,6 +87,7 @@ class HotelScraper:
         return None, None
 
     def get_hotel_pricing(self, params=None):
+        self.login()
         """Get hotel pricing with improved scraping and error handling"""
         if params is None:
             params = {
@@ -82,11 +99,12 @@ class HotelScraper:
                 "group_children": "0"
             }
 
-        # Get destination info
-        dest_id, dest_type = self.get_destination_info(params["ss"])
-        if not dest_id or not dest_type:
-            self.logger.error("Could not find destination information")
-            return []
+        if not self.dest_id or not self.dest_type:
+            # Get destination info
+            self.dest_id, self.dest_type = self.get_destination_info(params["ss"])
+            if not self.dest_id or not self.dest_id:
+                self.logger.error("Could not find destination information")
+                return []
 
         # Update parameters with destination info
         params.update({
@@ -98,17 +116,21 @@ class HotelScraper:
             "sb": "1",
             "src_elem": "sb",
             "src": Config.SRC,
-            "dest_id": dest_id,
-            "dest_type": dest_type,
+            "dest_id": self.dest_id,
+            "dest_type": self.dest_type,
             "order": Config.SORT_ORDER,
         })
-
+        filter_params = params.get("filter", None)
+        
         for attempt in range(self._max_retries):
             try:
                 driver = self.driver_manager.get_driver()
-                query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+                query_string = '&'.join([f"{k}={v}" for k, v in params.items() if k != 'filter'])
                 url = f"{Config.BOOKING_BASE_URL}?{query_string}"
-
+                if filter_params is not None:
+                    filter_url = ";".join(f'{i}' for i in filter_params)
+                    encoded_filter_url = urllib.parse.quote(filter_url, safe=':/?&')
+                    url = url + "&nflt=" + encoded_filter_url
                 self.logger.info(f"Fetching URL: {url}")
                 loading_animation = self._show_loading_animation("Loading page")
                 driver.get(url)
@@ -144,7 +166,7 @@ class HotelScraper:
 
                         # Extract review score
                         hotel_data["review"] = el.select_one('a[data-testid="review-score-link"] > span > div > div:nth-child(2)').text
-                        
+                        hotel_data["review_count"] = el.select_one('a[data-testid="review-score-link"] > span > div > div:nth-child(3) > div:nth-child(2)').text
                         hotel_results.append(hotel_data)
                     except Exception as e:
                         self.logger.warning(f"Error processing hotel card: {str(e)}")
@@ -193,10 +215,12 @@ class HotelScraper:
             }
 
             all_filters = soup.find_all('div', {'data-testid': 'filters-group-label-content'})
-            for rating in all_filters:
+            all_value = soup.find_all('', ())
+            for rating, value in all_filters, all_value:
                 if rating.text:
                     filter_details['all'].append({
-                        'name': rating.text,            
+                        'name': rating.text,     
+                        'value': value.text       
                     })
                         
             return filter_details

@@ -5,12 +5,15 @@ import logging
 from selenium.common.exceptions import WebDriverException
 import os
 import time
+import urllib.request
+import os.path
 
 class WebDriverManager:
     _instance = None
     _driver = None
     _retry_count = 3
     _retry_delay = 2  # seconds
+    _extension_path = os.path.join(os.path.dirname(__file__), 'adblocker_ultimate.crx')
 
     def __new__(cls):
         if cls._instance is None:
@@ -26,9 +29,20 @@ class WebDriverManager:
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
+            
+    def _check_extension(self):
+        """Check if the AdBlocker Ultimate extension exists"""
+        if not os.path.exists(self._extension_path):
+            self.logger.warning("AdBlocker Ultimate extension not found at: " + self._extension_path)
+            self.logger.info("Please download the extension and save it as 'adblocker_ultimate.crx' in the utils directory")
 
     def _create_chrome_options(self):
         chrome_options = Options()
+        
+        # Add AdBlocker Ultimate extension if available
+        if os.path.exists(self._extension_path):
+            chrome_options.add_extension(self._extension_path)
+            self.logger.info("AdBlocker Ultimate extension added")
         
         # Essential options for stability
         # chrome_options.add_argument('--headless=new')  # New headless mode
@@ -36,8 +50,23 @@ class WebDriverManager:
         chrome_options.add_argument('--no-sandbox')  # Bypass OS security model
         chrome_options.add_argument('--disable-dev-shm-usage')  # Overcome limited resource problems
         
+        # Options to help bypass bot detection
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Add custom preferences to appear more human-like
+        prefs = {
+            'profile.default_content_setting_values.notifications': 2,
+            'credentials_enable_service': False,
+            'profile.password_manager_enabled': False,
+            'webrtc.ip_handling_policy': 'disable_non_proxied_udp',
+            'webrtc.multiple_routes_enabled': False,
+            'webrtc.nonproxied_udp_enabled': False
+        }
+        chrome_options.add_experimental_option('prefs', prefs)
+        
         # Additional stability options
-        chrome_options.add_argument('--disable-extensions')  # Disable extensions
         chrome_options.add_argument('--disable-software-rasterizer')  # Disable software rasterizer
         chrome_options.add_argument('--ignore-certificate-errors')  # Ignore certificate errors
         chrome_options.add_argument('--disable-web-security')  # Disable web security
@@ -54,15 +83,35 @@ class WebDriverManager:
         
         return chrome_options
 
+    def _mask_selenium_properties(self):
+        """Mask Selenium's presence by modifying navigator properties"""
+        mask_scripts = [
+            # Remove webdriver property
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})",
+            # Add chrome plugins
+            "Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})",
+            # Add chrome.runtime
+            "window.chrome = { runtime: {} }",
+            # Modify permissions
+            "const originalQuery = window.navigator.permissions.query; window.navigator.permissions.query = parameters => parameters.name === 'notifications' ? Promise.resolve({state: Notification.permission}) : originalQuery(parameters)"
+        ]
+        for script in mask_scripts:
+            try:
+                self._driver.execute_script(script)
+            except Exception as e:
+                self.logger.warning(f"Failed to execute masking script: {str(e)}")
+
     def get_driver(self):
         try:
             if self._driver is None:
                 self.logger.info("Initializing new WebDriver instance...")
+                self._check_extension()
                 chrome_options = self._create_chrome_options()
                 
                 try:
                     self._driver = webdriver.Chrome(options=chrome_options)
                     self._driver.set_page_load_timeout(30)  # Set page load timeout
+                    self._mask_selenium_properties()  # Apply masking after driver creation
                     self.logger.info("WebDriver initialized successfully")
                 except Exception as e:
                     self.logger.error(f"Failed to initialize WebDriver: {str(e)}")

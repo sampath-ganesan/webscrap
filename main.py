@@ -119,16 +119,23 @@ class HotelSearchApp:
                     "ss": params['destination'],
                     "checkin": params['checkin_date'],
                     "checkout": params['checkout_date'],
-                    "group_adults": params['adults'],
+                    "group_adults": params['base_adults'],
                     "no_rooms": params['rooms'],
                     "group_children": params['children'],
                     "sb": "1",
                     "src": "searchresults",
-                    "src_elem": "sb"
+                    "src_elem": "sb",
+                    "filter": params["filter_params"]
                 }
-                hotel_results = self.hotel_scraper.get_hotel_pricing(search_params)
-                if hotel_results:
-                    all_results.extend(hotel_results)
+                # Search for each adult count
+                for adult_count in params['adult_counts']:
+                    search_params['group_adults'] = adult_count
+                    hotel_results = self.hotel_scraper.get_hotel_pricing(search_params)
+                    if hotel_results:
+                        for hotel in hotel_results:
+                            hotel['adults'] = adult_count
+                        all_results.extend(hotel_results)
+                    self.root.after(1000)  # Small delay between requests
             else:
                 current_date = start_date
                 while current_date < end_date:
@@ -137,19 +144,25 @@ class HotelSearchApp:
                         "ss": params['destination'],
                         "checkin": current_date.strftime('%Y-%m-%d'),
                         "checkout": next_date.strftime('%Y-%m-%d'),
-                        "group_adults": params['adults'],
+                        "group_adults": params['base_adults'],  # Use base adults as default
                         "no_rooms": params['rooms'],
                         "group_children": params['children'],
                         "sb": "1",
                         "src": "searchresults",
-                        "src_elem": "sb"
+                        "src_elem": "sb",
+                        "filter": params["filter_params"]
                     }
                     
-                    hotel_results = self.hotel_scraper.get_hotel_pricing(search_params)
-                    if hotel_results:
-                        for hotel in hotel_results:
-                            hotel['date'] = current_date.strftime('%Y-%m-%d')
-                        all_results.extend(hotel_results)
+                    # Search for each adult count
+                    for adult_count in params['adult_counts']:
+                        search_params['group_adults'] = adult_count
+                        hotel_results = self.hotel_scraper.get_hotel_pricing(search_params)
+                        if hotel_results:
+                            for hotel in hotel_results:
+                                hotel['date'] = current_date.strftime('%Y-%m-%d')
+                                hotel['adults'] = adult_count
+                            all_results.extend(hotel_results)
+                        self.root.after(1000)  # Small delay between requests
                     
                     current_date = next_date
                     self.root.after(1000)  # Small delay between requests
@@ -157,7 +170,7 @@ class HotelSearchApp:
             
             if not all_results:
                 messagebox.showwarning("No Results", "No hotels found for the selected criteria.")
-                self.show_search_criteria()
+                self.results_frame.show_search_criteria()
                 return
             
             self.results_frame.update_results(all_results)
