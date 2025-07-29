@@ -6,6 +6,7 @@ from utils.helpers.login_helper import LoginHelper
 from utils.web_driver_manager import WebDriverManager
 from utils.config import Config
 from bs4 import BeautifulSoup
+from lxml import html
 import requests
 import logging
 import time
@@ -21,6 +22,7 @@ class HotelScraper:
         self._retry_delay = 2  # seconds
         self.dest_id = None
         self.dest_type = None
+        self.destination = None
 
     def _setup_logging(self):
         self.logger = logging.getLogger('HotelScraper')
@@ -41,7 +43,12 @@ class HotelScraper:
 
     def login(self):
         """Login to Booking.com using email and password."""
-        if Config.DO_LOGING:
+        self.driver_manager.get_driver().get(Config.BOOKING_BASE_URL)
+        try:
+            is_sign_in_button = self.driver_manager.get_driver().find_element(By.XPATH, "//a/span[text() = 'Sign in']").is_displayed()
+        except:
+            is_sign_in_button = False
+        if Config.DO_LOGING and is_sign_in_button:
             self.logger.info("Starting login process")
             try:
                 login_helper = LoginHelper()
@@ -99,7 +106,10 @@ class HotelScraper:
                 "group_children": "0"
             }
 
-        if not self.dest_id or not self.dest_type:
+        if self.destination is None:
+            self.destination = params["ss"].split(",")[0]
+
+        if not self.dest_id or not self.dest_type or self.destination != (params["ss"].split(",")[0]):
             # Get destination info
             self.dest_id, self.dest_type = self.get_destination_info(params["ss"])
             if not self.dest_id or not self.dest_id:
@@ -192,7 +202,6 @@ class HotelScraper:
 
     def get_filter_details(self, search_term):
         try:
-            # Set up headers to mimic a browser request
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -203,26 +212,34 @@ class HotelScraper:
             response = requests.get(initial_url, headers=headers)
             
             if response.status_code != 200:
-                self.logger.error(f"Failed to fetch page. Status code: {response.status_code}")
                 return None
 
-            # Parse the HTML content
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Parse the HTML content using lxml
+            tree = html.fromstring(response.content)
             
-            # Initialize dictionary to store filter details
+            # Initialize the filter details with a single 'all' group
             filter_details = {
-                'all': [],               
+                'all': []
             }
+            
+            # Keep track of processed values to avoid duplicates
+            processed_values = set()
 
-            all_filters = soup.find_all('div', {'data-testid': 'filters-group-label-content'})
-            all_value = soup.find_all('', ())
-            for rating, value in all_filters, all_value:
-                if rating.text:
-                    filter_details['all'].append({
-                        'name': rating.text,     
-                        'value': value.text       
-                    })
-                        
+            labels = tree.xpath('//div[@data-testid="filters-group-label-content"]')
+            keys = tree.xpath('//div[@data-testid="filters-group-container"]//input')
+            
+            for label, key in zip(labels, keys):
+                filter_name = label.text_content().strip() if label is not None else "Unknown Filter"
+                value = key.get('value', '').strip() if key is not None else ''
+                
+                filter_item ={
+                    'name': filter_name,
+                    'value': value,
+                }
+
+                filter_details['all'].append(filter_item)
+                
+            filter_details['all'] = [item for item in filter_details['all'] if item['value'] not in processed_values and (processed_values.add(item['value']) or True)]
             return filter_details
             
         except requests.RequestException as e:

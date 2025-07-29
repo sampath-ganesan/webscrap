@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
 from tkcalendar import Calendar
-from utils.config import Config
 from utils.hotel_scraper import HotelScraper
 from utils.resources.filters import Filters
 
@@ -10,6 +9,7 @@ class SearchFrame:
         self.frame = ttk.Frame(parent)
         self.hotel_scraper = HotelScraper()
         self.filter_vars = {}
+        self.filter = None
         
         # Create search criteria frame on the left
         self.search_criteria_frame = ttk.LabelFrame(self.frame, text="Search Criteria", padding="10")
@@ -174,9 +174,12 @@ class SearchFrame:
         loading_label.pack(pady=10)
         self.filter_frame.update()
         
+        hotel_scraper = HotelScraper()
+
         try:
             # Get new filters
-            filters = Filters.filter
+            self.filter = hotel_scraper.get_filter_details(self.destination.get())
+            filters = self.filter
             loading_label.destroy()
             
             if filters and 'all' in filters:
@@ -275,12 +278,13 @@ class SearchFrame:
     def get_search_params(self):
         # Get selected filter names and find their corresponding values from Filters class
         selected_filter_names = [name for name, items in self.filter_vars.items() if items['var'].get()]
-        selected_filter_values = []
         
-        # Match selected names with filter values from Filters class
-        for filter_item in Filters.filter['all']:
-            if filter_item['name'] in selected_filter_names:
-                selected_filter_values.append(filter_item['value'])
+        selected_filter_values = []
+        if selected_filter_names:            
+            # Match selected names with filter values from Filters class
+            for filter_item in self.filter['all']:
+                if filter_item['name'] in selected_filter_names:
+                    selected_filter_values.append(filter_item['value'])
         
         # Generate list of adult counts based on increment and step count
         base_adults = int(self.adults.get())

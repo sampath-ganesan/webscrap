@@ -7,5 +7,6 @@ selenium
 urllib3
 tkcalendar
 pyinstaller
+webdriver-manager
 google-api-python-client
 google-auth-oauthlib
