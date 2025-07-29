@@ -39,11 +39,32 @@ class WebDriverManager:
     def _create_chrome_options(self):
         chrome_options = Options()
         
+        # Set Chrome binary location
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.environ.get('CHROME_PATH')
+        ]
+        
+        chrome_binary = None
+        for path in chrome_paths:
+            if path and os.path.exists(path):
+                chrome_binary = path
+                break
+                
+        if chrome_binary:
+            chrome_options.binary_location = chrome_binary
+        else:
+            self.logger.warning("Chrome binary not found in common locations. Please set CHROME_PATH environment variable.")
+          
+        
         # Add AdBlocker Ultimate extension if available
         if os.path.exists(self._extension_path):
             chrome_options.add_extension(self._extension_path)
             self.logger.info("AdBlocker Ultimate extension added")
         
+        chrome_options.add_argument('--verbose')
+        chrome_options.add_argument('--log-level=0')
         # Essential options for stability
         # chrome_options.add_argument('--headless=new')  # New headless mode
         chrome_options.add_argument('--disable-gpu')  # Disable GPU hardware acceleration
